@@ -1,0 +1,9 @@
+sample
+m = 1.0
+c = 1.0
+k = 100
+IACCFLG= 0（0：外力なし, 1：外力あり）
+DT = 1.0e-6
+IMASS = 3
+
+condition-1

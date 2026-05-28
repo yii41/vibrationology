@@ -147,7 +147,7 @@ def make_domain_flag(mx, my):
         lfglo[x3:x4+1, y3:y4+1] = 1
 
     else:
-        raise ValueError('DOMAIN_SHAPE は "rectangle" または "cross" にしてください。')
+        raise ValueError('DOMAIN_SHAPE は "rectangle" または "cross" にIACCFLてください。')
 
     return lfglo
 

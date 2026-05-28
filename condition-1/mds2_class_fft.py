@@ -43,7 +43,7 @@ IMASS = 3
 FBETA = 1.0 / 4.0
 
 # 時間刻み [s]
-DT = 0.001
+DT = 0.01
 
 # 円周率
 PI = np.pi
@@ -565,7 +565,86 @@ def save_all_fft_results(result: dict, dt: float, output_dir: Path) -> None:
 
 
 # ============================================================
-# 7. 実行部
+# 7. 時刻歴解析サマリ関数
+# ============================================================
+def analyze_time_history_all_masses(
+    time: np.ndarray,
+    history: np.ndarray,
+    dt: float,
+    rms_window: tuple[float, float] = (0.0, 20.0),
+    ref_history: np.ndarray | None = None,
+) -> None:
+    """
+    全質点の変位時刻歴について各種統計量を計算してコンソールに出力する。
+
+    Parameters
+    ----------
+    time : np.ndarray
+        時刻配列
+    history : np.ndarray
+        変位履歴 shape=(ITIMESTEP, IMASS)
+    dt : float
+        時間刻み [s]
+    rms_window : tuple[float, float]
+        RMS を算出する時間窓 (t_start, t_end) [s]。
+        全条件で同一窓を使うことで条件間の RMS を比較できる。
+    ref_history : np.ndarray or None
+        基準解（与えると基準解との誤差も出力する）
+
+    出力項目
+    --------
+    最大振幅 / 支配周期 / FFTピーク周波数・振幅 / RMS（指定窓内）
+    基準解との最大誤差・RMS誤差（ref_history 指定時のみ）
+    """
+    n_mass = history.shape[1]
+    t_start, t_end = rms_window
+    win_mask = (time >= t_start) & (time <= t_end)
+
+    print("\n" + "=" * 60)
+    print("  時刻歴解析サマリ  (time_history_all_masses)")
+    print(f"  RMS 算出窓: {t_start} – {t_end} s")
+    print("=" * 60)
+
+    for i in range(n_mass):
+        sig = history[:, i]
+
+        # ---- 最大振幅 ----
+        max_amp = float(np.max(np.abs(sig)))
+
+        # ---- FFT ピーク（DC 成分を除く）----
+        freq, amp = compute_fft(sig, dt)
+        pos_mask = freq > 0
+        if np.any(pos_mask):
+            peak_idx = int(np.argmax(amp[pos_mask]))
+            peak_freq = float(freq[pos_mask][peak_idx])
+            peak_amp  = float(amp[pos_mask][peak_idx])
+            period = 1.0 / peak_freq if peak_freq > 0 else float("inf")
+        else:
+            peak_freq, peak_amp, period = 0.0, 0.0, float("inf")
+
+        # ---- RMS（指定時間窓内のみ）----
+        sig_win = sig[win_mask]
+        rms = float(np.sqrt(np.mean(sig_win ** 2))) if len(sig_win) > 0 else float("nan")
+
+        print(f"\n  Mass {i + 1}")
+        print(f"    最大振幅         : {max_amp:.6f}")
+        print(f"    支配周期         : {period:.4f} s  (= 1 / {peak_freq:.4f} Hz)")
+        print(f"    FFT ピーク       : {peak_freq:.4f} Hz,  振幅 = {peak_amp:.6f}")
+        print(f"    RMS ({t_start}–{t_end} s)  : {rms:.6f}")
+
+        # ---- 基準解との差（オプション）----
+        if ref_history is not None:
+            ref_sig = ref_history[:, i]
+            max_err = float(np.max(np.abs(sig - ref_sig)))
+            rms_err = float(np.sqrt(np.mean((sig - ref_sig) ** 2)))
+            print(f"    基準解との最大誤差 : {max_err:.6e}")
+            print(f"    基準解との RMS 誤差: {rms_err:.6e}")
+
+    print("\n" + "=" * 60)
+
+
+# ============================================================
+# 8. 実行部
 # ============================================================
 def main() -> None:
     """
@@ -600,6 +679,23 @@ def main() -> None:
         output_dir=output_dir
     )
 
+    # 0〜20 s の変位時刻歴グラフ
+    mask = result["time"] <= 20.0
+    save_time_history_plot(
+        time=result["time"][mask],
+        history=result["history"][mask],
+        output_path=output_dir / "time_history_all_masses_0to20s.png"
+    )
+
+    # 時刻歴解析サマリ（全質点）
+    analyze_time_history_all_masses(
+        time=result["time"],
+        history=result["history"],
+        dt=DT,
+        rms_window=(0.0, 20.0),
+        # ref_history=<基準解の history 配列> を渡すと誤差も出力される
+    )
+
     # 画面表示用の簡単な数値出力
     print("Simulation finished.")
     print("First 5 values of v_001:")
@@ -609,6 +705,7 @@ def main() -> None:
     print("FFT files were also saved:")
     print("  f_001.txt, f_002.txt, f_003.txt")
     print("  f_001.png, f_002.png, f_003.png, f_all.png")
+    print("  time_history_all_masses_0to20s.png  (0–20 s)")
     print(f"Output folder: {output_dir.resolve()}")
 
 
